@@ -10,3 +10,5 @@ Features
 - create writable states for any writable api call of daly bms
 - light on CPU and RAM usage
 - autoamtically adapts to BMS configuration as "number of cells"
+
+reference.py demonstrates a working pythong script with a smimular functionality but no integration as an iobroker adapter
