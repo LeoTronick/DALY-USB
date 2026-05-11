@@ -200,6 +200,13 @@ class DalyUsbAdapter extends utils.Adapter {
         if (!Bounds.packVoltage(m.voltage)) {
             throw new Error(`pack voltage out of range: ${m.voltage} V`);
         }
+        const maxVoltage = this.bms!.cellCount * 4.5;
+        if (m.voltage > maxVoltage) {
+            throw new Error(
+                `pack voltage ${m.voltage} V exceeds cell-count ceiling ${maxVoltage} V` +
+                    ` (${this.bms!.cellCount} cells × 4.5 V/cell)`,
+            );
+        }
         if (!Bounds.packCurrent(m.current)) {
             throw new Error(`pack current out of range: ${m.current} A`);
         }
