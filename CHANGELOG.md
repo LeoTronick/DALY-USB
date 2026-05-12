@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0](https://github.com/LeoTronick/DALY-USB/compare/v0.1.0...v0.2.0) (2026-05-12)
+
+
+### Features
+
+* hardware safety hardening ([29529bf](https://github.com/LeoTronick/DALY-USB/commit/29529bf4b31744dfcd93aa78f31ba3460f32cf29))
+* hardware safety hardening from autoplan security review ([c4b95e1](https://github.com/LeoTronick/DALY-USB/commit/c4b95e161d242eddf9de8dc5757cf5a0f8fd43c3))
+
+
+### Bug Fixes
+
+* add prepare script so git installs compile TypeScript ([d010719](https://github.com/LeoTronick/DALY-USB/commit/d010719ae14935cb866a5494ceba8e52c18fe9f6))
+* add prepare script so git installs compile TypeScript ([88b1f1e](https://github.com/LeoTronick/DALY-USB/commit/88b1f1e4ccb91a458fd94e002840787d66916a25))
+* derive pack voltage ceiling from discovered cell count ([5f09040](https://github.com/LeoTronick/DALY-USB/commit/5f0904007a2c298b43120e8bdc7d024afa5a828b))
+
 ## [0.1.0](https://github.com/LeoTronick/DALY-USB/compare/v0.0.1...v0.1.0) (2026-05-11)
 
 
