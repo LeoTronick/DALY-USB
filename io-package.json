@@ -3,6 +3,10 @@
     "name": "daly-usb",
     "version": "0.2.1",
     "news": {
+      "0.2.1": {
+        "en": "remove prepare script so npm git installs use committed build output",
+        "de": "prepare-Skript entfernt, damit npm-Git-Installationen das eingecheckte Build-Ergebnis verwenden"
+      },
       "0.2.0": {
         "en": "hardware safety hardening, pack voltage ceiling from cell count",
         "de": "Hardware-Sicherheitshärtung, Packspannungsgrenze aus Zellanzahl"
