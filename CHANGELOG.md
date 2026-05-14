@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/LeoTronick/DALY-USB/compare/v0.2.0...v0.2.1) (2026-05-14)
+
+
+### Bug Fixes
+
+* commit build output so git installs work on npm 10 ([d9e43eb](https://github.com/LeoTronick/DALY-USB/commit/d9e43eb706201e7e3cc2532fc8287b945c9381a3))
+* commit build output so git installs work on npm 10 ([f3c1804](https://github.com/LeoTronick/DALY-USB/commit/f3c1804500f18e6363af2c6bb5d54838ed9b29a1))
+
 ## [0.2.0](https://github.com/LeoTronick/DALY-USB/compare/v0.1.0...v0.2.0) (2026-05-12)
 
 
