@@ -41,6 +41,8 @@ const transport_1 = require("./lib/daly/transport");
 const CONNECTION_DOWN_AFTER_FAILED_TICKS = 3;
 const HEARTBEAT_STUCK_LIMIT = 5;
 const MOSFET_WRITE_DEBOUNCE_MS = 2000;
+const MOSFET_WRITE_WATCHDOG_MS = 30_000;
+const MOSFET_WRITE_DRAIN_MS = 10_000;
 class DalyUsbAdapter extends utils.Adapter {
     transport;
     poller;
@@ -72,6 +74,12 @@ class DalyUsbAdapter extends utils.Adapter {
         if (!/^(\/dev\/tty|\/dev\/serial\/)/.test(serialPort) || serialPort.includes("..")) {
             this.log.error(`invalid serialPort "${serialPort}": must be under /dev/tty* or /dev/serial/by-id/`);
             return;
+        }
+        if (!/\/dev\/serial\/(by-id|by-path)\//.test(serialPort)) {
+            this.log.warn(`serialPort "${serialPort}" is not a stable path. If other USB devices are ` +
+                `added or removed, the OS may reassign this path to a different device and ` +
+                `DALY commands could be sent to wrong hardware. ` +
+                `Use /dev/serial/by-id/... for a device-specific stable path.`);
         }
         const baudRate = Number(this.config.baudRate);
         const pollIntervalMs = Number(this.config.pollIntervalMs);
@@ -531,6 +539,19 @@ class DalyUsbAdapter extends utils.Adapter {
         catch {
             /* ignore — best-effort cleanup */
         }
+        // Drain any in-flight MOSFET write before closing the transport.
+        // Closing the port mid-write could send a partial frame to the BMS,
+        // leaving a MOSFET in an unknown state.
+        if (this.mosfetWriteInFlight) {
+            const drainStart = Date.now();
+            while (this.mosfetWriteInFlight && Date.now() - drainStart < MOSFET_WRITE_DRAIN_MS) {
+                await new Promise(r => setTimeout(r, 50));
+            }
+            if (this.mosfetWriteInFlight) {
+                this.log.error(`onUnload: MOSFET write still in flight after ${MOSFET_WRITE_DRAIN_MS}ms — forcing teardown`);
+                this.mosfetWriteInFlight = false;
+            }
+        }
         try {
             await this.poller?.stop();
         }
@@ -592,10 +613,27 @@ class DalyUsbAdapter extends utils.Adapter {
         }
         this.lastMosfetWriteAt = now;
         this.mosfetWriteInFlight = true;
+        // Watchdog: force-clear the flag if the write somehow hangs longer than
+        // MOSFET_WRITE_WATCHDOG_MS (e.g., transport stalls beyond its own timeout).
+        // Without this, a hung write would permanently suppress MOSFET state updates.
+        const watchdog = setTimeout(() => {
+            if (this.mosfetWriteInFlight) {
+                this.log.error(`MOSFET write watchdog fired after ${MOSFET_WRITE_WATCHDOG_MS}ms — ` +
+                    `clearing in-flight flag to restore normal polling`);
+                this.mosfetWriteInFlight = false;
+            }
+        }, MOSFET_WRITE_WATCHDOG_MS);
         try {
+            // Re-check connection inside the critical section: the BMS could have gone
+            // offline between the initial check (above) and here.
+            if (this.connectionDown) {
+                this.log.warn(`${controlId}: connection went down before write could be sent — aborting`);
+                return;
+            }
             await this.doMosfetWrite(command, on, controlId, readbackId);
         }
         finally {
+            clearTimeout(watchdog);
             this.mosfetWriteInFlight = false;
         }
     }
@@ -609,13 +647,26 @@ class DalyUsbAdapter extends utils.Adapter {
             this.log.warn(`failed to write ${controlId}=${on}: ${err.message}`);
             return;
         }
-        try {
-            await this.tickMosfetStatus();
-        }
-        catch (err) {
-            this.log.warn(`readback after ${controlId} write failed: ${err.message}`);
-            await this.setStateChangedAsync("info.mosfetWriteFailed", true, true);
-            return;
+        // Retry the readback once on failure. A transient serial glitch after a
+        // successful write should not leave the MOSFET state permanently unknown.
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                await this.tickMosfetStatus();
+                break;
+            }
+            catch (err) {
+                if (attempt === 1) {
+                    this.log.warn(`readback after ${controlId} write failed (attempt 1): ` +
+                        `${err.message} — retrying in 200ms`);
+                    await new Promise(r => setTimeout(r, 200));
+                }
+                else {
+                    this.log.error(`readback after ${controlId} write failed (attempt 2): ` +
+                        `${err.message} — MOSFET state unknown`);
+                    await this.setStateChangedAsync("info.mosfetWriteFailed", true, true);
+                    return;
+                }
+            }
         }
         const readback = await this.getStateAsync(readbackId);
         const actual = readback?.val;
