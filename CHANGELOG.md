@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.4](https://github.com/LeoTronick/daly-usb/compare/v0.2.3...v0.2.4) (2026-05-23)
+
+
+### Bug Fixes
+
+* document two-arg install command and add missing news entries ([7327c98](https://github.com/LeoTronick/daly-usb/commit/7327c9895056eac831980db203d53631d0274ac2))
+* document two-arg install command and add missing news entries ([41c78c6](https://github.com/LeoTronick/daly-usb/commit/41c78c674bbc69703df34db2ab97a6b2e7eeaded))
+
 ## [0.2.3](https://github.com/LeoTronick/DALY-USB/compare/v0.2.2...v0.2.3) (2026-05-20)
 
 
