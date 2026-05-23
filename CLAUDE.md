@@ -48,10 +48,12 @@ src/
 - Plausibility bounds in `Bounds` (commands.ts) reject impossible parser outputs (SOC > 110 %, voltage outside 5–100 V, cell V outside 0.5–4.5 V, etc.) so wire glitches never reach ioBroker as fact. `tick*` functions throw on out-of-range — `guarded()` then suppresses the publish.
 - `combineCellVoltageFrames` / `combineTemperatureFrames` strictly require the received `frameIndex` set to be exactly `{1..ceil(n/k)}`. Duplicate or missing frames throw rather than silently leaving cells/sensors at 0 V / -40 °C.
 - Auto-discovery (`main.discover()`) reads 0x94 once, clamps to `MAX_CELLS=48` / `MAX_TEMP_SENSORS=16`, and refuses to start if the BMS reports impossible counts. `syncDynamicObjects()` creates exactly N cell + balancer objects and M temp-sensor objects, deleting any stragglers from a previous run with a different cell count.
-- MOSFET writes are gated by `native.allowMosfetWrites` (default `false`). When enabled, `handleMosfetWrite()` sends the write, runs `tickMosfetStatus()` to read the BMS-reported MOS state, and only acks the writable `control.*` state if the readback matches the requested value — otherwise the state stays at `ack: false` so automations can detect a rejected write.
+- MOSFET writes are gated by `native.allowMosfetWrites` (default `false`). When enabled, `handleMosfetWrite()` acquires `mosfetWriteInFlight=true` (mutex), re-checks `connectionDown` inside the critical section, sends the write, retries `tickMosfetStatus()` once (200 ms delay) on a transient failure, then clears the flag. The write only acks if readback matches; otherwise `info.mosfetWriteFailed=true` so automations can detect a rejected write. `MOSFET_WRITE_WATCHDOG_MS` (30 s) force-clears `mosfetWriteInFlight` as a last-resort guard against hung transport. While `mosfetWriteInFlight` is true the poll tick skips publishing MOSFET state.
 - `bmsLife` is the BMS's internal heartbeat byte. `tickMosfetStatus` watches it; if it fails to advance for 5 consecutive successful reads, `info.connection` flips false (BMS is locked up even though the bus is open).
 - `subscribeStates` is limited to `control.*` and only happens when `allowMosfetWrites` is true. Read-only states use `setStateChangedAsync` to keep DB writes minimal.
-- `onUnload` order matters: `unsubscribeStatesAsync('control.*')` first (no new writes accepted), then `await poller.stop()` (waits for the in-flight tick), then `await transport.close()`, then ack `info.connection=false`. Reordering this re-introduces the unload race.
+- On connection loss (`connectionDown=true`), all volatile telemetry (pack measurements, cell voltages, temperatures, MOSFET states, energy values) is set to `null`; `lastVoltage` is reset to `NaN` so `energyRemaining` is not computed from stale data. Alarm flags are intentionally left unchanged — a stale alarm is safer than silently clearing it while the BMS is unreachable.
+- `serialPort` is validated at startup: must match `/dev/tty*` or `/dev/serial/`; adapter refuses to start with a path traversal. If the path is not under `/dev/serial/by-id/` or `by-path`, a warning is logged — `/dev/ttyUSB0`-style paths can be reassigned when other USB devices are added.
+- `onUnload` order matters: `unsubscribeStatesAsync('control.*')` first (no new writes accepted), then drain any in-flight MOSFET write (up to `MOSFET_WRITE_DRAIN_MS` = 10 s), then `await poller.stop()` (waits for in-flight tick), then `await transport.close()`, then ack `info.connection=false`. Reordering this re-introduces the unload race or can send a partial MOSFET command.
 
 ## DALY UART protocol notes
 
@@ -67,7 +69,7 @@ Useful when extending `commands.ts` or debugging transport issues.
 
 ## Testing patterns
 
-- Pure parsers go in `src/lib/daly/*.test.ts` and run via `ts-node`. Mocha picks them up via the `mocharc.custom.json` glob.
+- Pure unit tests live in `src/lib/daly/*.test.ts` (`protocol.test.ts`, `commands.test.ts`, `transport.test.ts`, `poller.test.ts`) and run via `ts-node`. Mocha picks them up via the `mocharc.custom.json` glob.
 - Don't unit-test `main.ts` directly — use `tests.integration` from `@iobroker/testing` (`test/integration/test.js`) which spins up an actual js-controller. Slow; run on demand, not in pre-commit.
 - Package shape (io-package.json keys, valid JSON, license, etc.) is covered by `test/package/test.js` and runs in CI.
 
